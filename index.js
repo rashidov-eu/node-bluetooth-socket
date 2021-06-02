@@ -1,5 +1,6 @@
 const stream = require('stream');
-const ErrNo = require('errno')
+const ErrNo = require('errno');
+const { isRegExp } = require('util');
 const BluetoothFd = require('bindings')('BluetoothFd').BluetoothFd;
 
 ErrNo.errno[-9] = {
@@ -28,10 +29,10 @@ class BluetoothSocket extends stream.Duplex {
 
         let err = null;
         if (ret !== 0) {
-            if(typeof ret === "number") {
+            if (typeof ret === "number") {
                 // if its a number its an libuv error code
                 const errDesc = ErrNo.errno[ret] || {};
-                const err = new Error(errDesc.description || "Code "+ret);
+                const err = new Error(errDesc.description || "Code " + ret);
                 err.name = "SystemError";
                 err.syscall = "write";
                 err.errno = ret;
@@ -49,11 +50,11 @@ class BluetoothSocket extends stream.Duplex {
 
     onRead(err, buf) {
         if (err) {
-            if(typeof err === 'number') {
+            if (typeof err === 'number') {
                 // if its a number its an libuv error code
                 const errno = err;
                 const errDesc = ErrNo.errno[errno] || {};
-                err = new Error(errDesc.description || "Code "+errno);
+                err = new Error(errDesc.description || "Code " + errno);
                 err.name = "SystemError";
                 err.syscall = "read";
                 err.errno = errno;
@@ -82,6 +83,21 @@ class BluetoothSocket extends stream.Duplex {
             return cb && cb(e);
         }
         cb && cb();
+    }
+
+    bind(port) {
+        this._impl.bind(port);
+    }
+
+    listen() {
+        this._impl.listen();
+    }
+
+    accept(options, cb) {
+        if (cb === undefined)
+            cb = options;
+
+        this._impl.accept((fd) => cb(new BluetoothSocket(fd, options)));
     }
 }
 

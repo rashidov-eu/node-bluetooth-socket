@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/rfcomm.h>
 
 using namespace v8;
 
@@ -177,9 +180,112 @@ NAN_MODULE_INIT(BluetoothFd::Init) {
     Nan::SetPrototypeMethod(tmpl, "stop", Stop);
     Nan::SetPrototypeMethod(tmpl, "write", Write);
     Nan::SetPrototypeMethod(tmpl, "close", Close);
+    Nan::SetPrototypeMethod(tmpl, "bind", Bind);
+    Nan::SetPrototypeMethod(tmpl, "listen", Listen);
+    Nan::SetPrototypeMethod(tmpl, "accept", Accept);
 
     constructor_template.Reset(tmpl);
     Nan::Set(target, Nan::New("BluetoothFd").ToLocalChecked(), Nan::GetFunction(tmpl).ToLocalChecked());
+}
+
+NAN_METHOD(BluetoothFd::Bind) {
+    Nan::HandleScope scope;
+
+    if (info.Length() != 1) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Bind(channel)");
+    }
+    
+    Local<Value> arg0 = info[0];
+    if (!(arg0->IsInt32() || arg0->IsUint32())) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Bind(channel)");
+    }
+    int channel = Nan::To<int32_t>(arg0).FromJust();
+    if (channel < 0) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Bind(channel)");
+    }
+
+    BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
+
+    if(p->_fd >0){
+        return Nan::ThrowTypeError("cannot call bind on an active socket");
+    }
+
+    p->bind(channel);
+}
+
+NAN_METHOD(BluetoothFd::Listen) {
+    Nan::HandleScope scope;
+
+    BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
+    p->listen();
+}
+
+NAN_METHOD(BluetoothFd::Accept) {
+    Nan::HandleScope scope;
+
+    if (info.Length() != 1) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.accept(callback)");
+    }
+
+    Local<Value> arg0 = info[0];
+    if (!arg0->IsFunction()) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.accept(callback)");
+    }
+
+    BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
+    p->accept(arg0.As<Function>());
+}
+
+void BluetoothFd::accept(const Local<Function>& acceptCallback){
+    this->acceptHandle.data = this;
+    this->_acceptCallback.SetFunction(acceptCallback); // function passed in
+    uv_queue_work(uv_default_loop(), &this->acceptHandle, BluetoothFd::do_acceptCallback, after_acceptCallback);
+}
+
+void BluetoothFd::bind(uint8_t channel) {
+    bdaddr_t my_bdaddr_any = { 0, 0, 0, 0, 0, 0 }; // same as BDADDR_ANY
+    struct sockaddr_rc loc_addr = { AF_BLUETOOTH, my_bdaddr_any, channel };
+    
+    this->_fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+
+    //loc_addr.rc_family = AF_BLUETOOTH;
+    //loc_addr.rc_channel = channel;
+    //loc_addr.rc_bdaddr = *BDADDR_ANY;
+
+    // accept one connection
+    ::bind(this->_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
+}
+
+void BluetoothFd::listen() {
+    // accept one connection
+    ::listen(this->_fd, 1);
+}
+
+void BluetoothFd::do_accept() {
+    struct sockaddr_rc rem_addr = { 0, 0,0,0,0,0,0, 0 };
+    socklen_t opt = sizeof(rem_addr);
+    // accept one connection
+    this->_client = ::accept(this->_fd, (struct sockaddr *)&rem_addr, &opt);
+}
+
+void BluetoothFd::do_acceptCallback(uv_work_t *handle) {
+    BluetoothFd* p = (BluetoothFd*)handle->data;
+
+    p->do_accept();
+}
+
+void BluetoothFd::after_acceptCallback(uv_work_t *handle, int status) {
+    BluetoothFd* p = (BluetoothFd*)handle->data;
+
+    p->after_accept(status);
+}
+
+void BluetoothFd::after_accept(int status){
+    if(status < 0) {
+        Local<Value> argv[2] = {Nan::New<Number>(status), Nan::New<Number>(this->_client)};
+        Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
+        return;
+    }
 }
 
 // Workaground for cast warning: See: https://github.com/nodejs/nan/issues/807

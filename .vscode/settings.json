@@ -1,0 +1,6 @@
+{
+    "C_Cpp.default.includePath": [ 
+        "~/.node-gyp/10.16.3/include/node",
+        "~/src/iSeries/hw/node-bluetooth-socket/node_modules/nan/**",
+        "${workspaceFolder}/src/**"]
+}
