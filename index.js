@@ -89,15 +89,34 @@ class BluetoothSocket extends stream.Duplex {
         this._impl.bind(port);
     }
 
-    listen() {
-        this._impl.listen();
+    listen(qLength = 1) {
+        if(typeof qLength !== 'number' || qLength <= 0)
+            throw TypeError("qlLength must be a positive number");
+
+        this._impl.listen(qLength);
     }
 
     accept(options, cb) {
         if (cb === undefined)
             cb = options;
 
-        this._impl.accept((fd) => cb(new BluetoothSocket(fd, options)));
+        this._impl.accept((err, fd) => {
+            if (err) {
+                if (typeof err === 'number') {
+                    // if its a number its an libuv error code
+                    const errno = err;
+                    const errDesc = ErrNo.errno[errno] || {};
+                    err = new Error(errDesc.description || "Code " + errno);
+                    err.name = "SystemError";
+                    err.syscall = "accept";
+                    err.errno = errno;
+                    err.code = errDesc.code;
+                }
+                cb(err, undefined);
+            } else {
+                cb(undefined, new BluetoothSocket(fd, options));
+            }
+        });
     }
 }
 

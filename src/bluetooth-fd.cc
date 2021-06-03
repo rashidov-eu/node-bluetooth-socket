@@ -199,6 +199,7 @@ NAN_METHOD(BluetoothFd::Bind) {
     if (!(arg0->IsInt32() || arg0->IsUint32())) {
         return Nan::ThrowTypeError("usage: BluetoothFd.Bind(channel)");
     }
+
     int channel = Nan::To<int32_t>(arg0).FromJust();
     if (channel < 0) {
         return Nan::ThrowTypeError("usage: BluetoothFd.Bind(channel)");
@@ -215,9 +216,23 @@ NAN_METHOD(BluetoothFd::Bind) {
 
 NAN_METHOD(BluetoothFd::Listen) {
     Nan::HandleScope scope;
+    
+    if (info.Length() != 1) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Listen(qLength)");
+    }
+    
+    Local<Value> arg0 = info[0];
+    if (!(arg0->IsInt32() || arg0->IsUint32())) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Listen(qLength)");
+    }
+    
+    int qLength = Nan::To<int32_t>(arg0).FromJust();
+    if (qLength < 0) {
+        return Nan::ThrowTypeError("usage: BluetoothFd.Listen(qLength)");
+    }
 
     BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
-    p->listen();
+    p->listen(qLength);
 }
 
 NAN_METHOD(BluetoothFd::Accept) {
@@ -256,9 +271,9 @@ void BluetoothFd::bind(uint8_t channel) {
     ::bind(this->_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
 }
 
-void BluetoothFd::listen() {
+void BluetoothFd::listen(int qLength) {
     // accept one connection
-    ::listen(this->_fd, 1);
+    ::listen(this->_fd, qLength);
 }
 
 void BluetoothFd::do_accept() {
@@ -282,9 +297,11 @@ void BluetoothFd::after_acceptCallback(uv_work_t *handle, int status) {
 
 void BluetoothFd::after_accept(int status){
     if(status < 0) {
-        Local<Value> argv[2] = {Nan::New<Number>(status), Nan::New<Number>(this->_client)};
+        Local<Value> argv[2] = {Nan::New<Number>(status), Nan::Null()};
         Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
-        return;
+    } else {
+        Local<Value> argv[2] = {Nan::Null(), Nan::New<Number>(this->_client)};
+        Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
     }
 }
 
