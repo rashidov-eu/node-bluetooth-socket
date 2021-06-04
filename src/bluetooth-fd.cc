@@ -211,7 +211,9 @@ NAN_METHOD(BluetoothFd::Bind) {
         return Nan::ThrowTypeError("cannot call bind on an active socket");
     }
 
-    p->bind(channel);
+    if(p->bind(channel) == -1){
+        return Nan::ThrowError(Nan::ErrnoException(p->_lastErrno, "bind"));
+    }
 }
 
 NAN_METHOD(BluetoothFd::Listen) {
@@ -232,7 +234,9 @@ NAN_METHOD(BluetoothFd::Listen) {
     }
 
     BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
-    p->listen(qLength);
+    if(p->listen(qLength)== -1){
+        return Nan::ThrowError(Nan::ErrnoException(p->_lastErrno, "listen"));
+    }
 }
 
 NAN_METHOD(BluetoothFd::Accept) {
@@ -257,7 +261,7 @@ void BluetoothFd::accept(const Local<Function>& acceptCallback){
     uv_queue_work(uv_default_loop(), &this->acceptHandle, BluetoothFd::do_acceptCallback, after_acceptCallback);
 }
 
-void BluetoothFd::bind(uint8_t channel) {
+int BluetoothFd::bind(uint8_t channel) {
     bdaddr_t my_bdaddr_any = { 0, 0, 0, 0, 0, 0 }; // same as BDADDR_ANY
     struct sockaddr_rc loc_addr = { AF_BLUETOOTH, my_bdaddr_any, channel };
     
@@ -268,12 +272,21 @@ void BluetoothFd::bind(uint8_t channel) {
     //loc_addr.rc_bdaddr = *BDADDR_ANY;
 
     // accept one connection
-    ::bind(this->_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
+    auto status = ::bind(this->_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr));
+    if(status == -1)
+        this->_lastErrno = errno;
+        
+    return status;
 }
 
-void BluetoothFd::listen(int qLength) {
+int BluetoothFd::listen(int qLength) {
     // accept one connection
-    ::listen(this->_fd, qLength);
+    auto status = ::listen(this->_fd, qLength);  
+    
+    if(status == -1)
+        this->_lastErrno = errno;
+        
+    return status;
 }
 
 void BluetoothFd::do_accept() {
@@ -281,6 +294,8 @@ void BluetoothFd::do_accept() {
     socklen_t opt = sizeof(rem_addr);
     // accept one connection
     this->_client = ::accept(this->_fd, (struct sockaddr *)&rem_addr, &opt);
+    if(this->_client == -1)
+        this->_lastErrno = errno;
 }
 
 void BluetoothFd::do_acceptCallback(uv_work_t *handle) {
@@ -297,9 +312,13 @@ void BluetoothFd::after_acceptCallback(uv_work_t *handle, int status) {
 
 void BluetoothFd::after_accept(int status){
     Nan::HandleScope scope;
-    
+
     if(status < 0) {
         Local<Value> argv[2] = {Nan::New<Number>(status), Nan::Null()};
+        Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
+    } 
+    else if(this->_client == -1) {
+        Local<Value> argv[2] = {Nan::ErrnoException(this->_lastErrno, "accept"), Nan::Null()};
         Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
     } else {
         Local<Value> argv[2] = {Nan::Null(), Nan::New<Number>(this->_client)};

@@ -22,8 +22,8 @@ class BluetoothFd : public Nan::ObjectWrap {
 
     void start();
     void stop();
-    void bind(uint8_t);
-    void listen(int qLength);
+    int bind(uint8_t);
+    int listen(int qLength);
 
     int write_(char* data, int length);
     bool close_();
@@ -43,6 +43,7 @@ class BluetoothFd : public Nan::ObjectWrap {
 
     int _fd;
     int _client;
+    int _lastErrno;
     Nan::Callback _readCallback;
     Nan::Callback _acceptCallback;
 
