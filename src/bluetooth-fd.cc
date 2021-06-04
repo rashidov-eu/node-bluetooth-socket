@@ -296,6 +296,8 @@ void BluetoothFd::after_acceptCallback(uv_work_t *handle, int status) {
 }
 
 void BluetoothFd::after_accept(int status){
+    Nan::HandleScope scope;
+    
     if(status < 0) {
         Local<Value> argv[2] = {Nan::New<Number>(status), Nan::Null()};
         Nan::Call(this->_acceptCallback, Nan::GetCurrentContext()->Global(), 2, argv);
