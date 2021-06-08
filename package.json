@@ -27,7 +27,7 @@
     "node-gyp": "^6.1.0"
   },
   "publishConfig": {
-    "registry":"https://npm.pkg.github.com"
+    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",
@@ -38,5 +38,9 @@
   },
   "os": [
     "linux"
-  ]
+  ],
+  "devDependencies": {
+    "split": "^1.0.1",
+    "through": "^2.3.8"
+  }
 }
