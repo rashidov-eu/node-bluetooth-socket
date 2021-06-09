@@ -95,6 +95,10 @@ class BluetoothSocket extends stream.Duplex {
 
         this._impl.listen(qLength);
     }
+    
+    close() {
+        this.destroy();
+    }
 
     accept(options, cb) {
         if (cb === undefined)

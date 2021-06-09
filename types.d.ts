@@ -4,5 +4,6 @@ declare class BluetoothSocket extends Duplex {
     bind(port: number): void;
     listen(qlength?: number): void;
     accept(options?: DuplexOptions, cb?: (err: any, sock: BluetoothSocket) => void): void;
+    close(): void;
 }
 export = BluetoothSocket;
