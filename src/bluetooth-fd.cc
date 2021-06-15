@@ -12,6 +12,16 @@
 #include <bluetooth/rfcomm.h>
 
 using namespace v8;
+bool SetSocketBlocking(int fd, bool isBlocking)
+{
+    if (fd < 0)
+        return false;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1)
+        return false;
+    flags = isBlocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+    return (fcntl(fd, F_SETFL, flags) == 0) ? true : false;
+}
 
 Nan::Persistent<FunctionTemplate> BluetoothFd::constructor_template;
 
@@ -265,7 +275,7 @@ int BluetoothFd::bind(uint8_t channel) {
     bdaddr_t my_bdaddr_any = { 0, 0, 0, 0, 0, 0 }; // same as BDADDR_ANY
     struct sockaddr_rc loc_addr = { AF_BLUETOOTH, my_bdaddr_any, channel };
     
-    this->_fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+    this->_fd = socket(AF_BLUETOOTH, SOCK_STREAM | SOCK_CLOEXEC, BTPROTO_RFCOMM);
 
     //loc_addr.rc_family = AF_BLUETOOTH;
     //loc_addr.rc_channel = channel;
@@ -290,12 +300,29 @@ int BluetoothFd::listen(int qLength) {
 }
 
 void BluetoothFd::do_accept() {
-    struct sockaddr_rc rem_addr = { 0, 0,0,0,0,0,0, 0 };
+    struct sockaddr_rc rem_addr = {0, 0, 0, 0, 0, 0, 0, 0};
     socklen_t opt = sizeof(rem_addr);
     // accept one connection
-    this->_client = ::accept(this->_fd, (struct sockaddr *)&rem_addr, &opt);
-    if(this->_client == -1)
-        this->_lastErrno = errno;
+    while(true){
+        this->_client = ::accept4(this->_fd, (struct sockaddr *)&rem_addr, &opt, SOCK_NONBLOCK | SOCK_CLOEXEC);
+
+        if (this->_client == -1)
+        {
+            if (errno == EAGAIN || EWOULDBLOCK)
+            {
+                break;
+            }
+            if (errno == EINTR || errno == ECONNABORTED)
+            {
+                continue;
+            }
+
+            this->_lastErrno = errno;
+        }
+
+        // let the caller handle the new client
+        return;
+    }
 }
 
 void BluetoothFd::do_acceptCallback(uv_work_t *handle) {
