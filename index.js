@@ -105,6 +105,12 @@ class BluetoothSocket extends stream.Duplex {
             cb = options;
             options = undefined;
         }
+        
+        let nonblocking = true;
+        
+        if(options && options.nonblocking){
+            nonblocking = options.nonblocking;
+        }
 
         this._impl.accept(options?.nonblocking | true, (err, fd) => {
             if (err) {

@@ -82,7 +82,24 @@ void BluetoothFd::stop() {
     }
 }
 
-ssize_t BluetoothFd::write_(char* data, int length) { return write(this->_fd, data, length); }
+ssize_t BluetoothFd::write_(char* data, int length) { 
+    ssize_t ret = 0;
+
+    while(length > 0){
+        
+        do{
+            ret = write(this->_fd, data, length); 
+        } while((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
+
+        if(ret < 0)
+            return ret;
+        
+        length -= ret;
+        data += ret;
+    }
+
+    return 0;
+}
 
 bool BluetoothFd::close_() {
     this->stop();
@@ -148,26 +165,13 @@ NAN_METHOD(BluetoothFd::Write) {
     if (info.Length() > 0) {
         Local<Value> arg0 = info[0];
         if (arg0->IsObject()) {
-            ssize_t res = 0;
-            int size = node::Buffer::Length(arg0);
-            auto buf = node::Buffer::Data(arg0);
-            
-            while (size > 0) {
-                do {
-                    res = p->write_(buf, size);
-                } while((res < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
-
-                if (res < 0) {
-                    info.GetReturnValue().Set(Nan::ErrnoException(errno, "write"));
-                    return;
-                }
-
-                // shink size and walk buf forward by res bytes
-                size -= res;
-                buf += res;
+            int res = p->write_(node::Buffer::Data(arg0), node::Buffer::Length(arg0));
+            if (res > 0) {
+                info.GetReturnValue().Set(0);
+            } else {
+                info.GetReturnValue().Set(Nan::ErrnoException(errno, "write"));
             }
 
-            info.GetReturnValue().Set(0);
         } else {
             return Nan::ThrowTypeError("Can only write Buffers");
         }
@@ -275,15 +279,15 @@ NAN_METHOD(BluetoothFd::Accept) {
         return Nan::ThrowTypeError(usage);
     } 
 
-    auto nonBlocking = Nan::To<bool>(arg0).FromJust();
-
     Local<Value> arg1 = info[1];
-    if (!arg0->IsFunction()) {
+    if (!arg1->IsFunction()) {
         return Nan::ThrowTypeError(usage);
     }
 
     BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
-    p->accept(nonBlocking, arg1.As<Function>());
+    p->accept(
+        Nan::To<bool>(arg0).FromJust(), 
+        arg1.As<Function>());
 }
 
 void BluetoothFd::accept(const bool nonBlocking, const Local<Function>& acceptCallback){
