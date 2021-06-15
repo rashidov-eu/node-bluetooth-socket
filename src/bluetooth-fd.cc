@@ -270,7 +270,7 @@ NAN_METHOD(BluetoothFd::Accept) {
     Nan::HandleScope scope;
     const char* usage = "usage: BluetoothFd.accept(blocking, callback)";
 
-    if (info.Length() != 1) {
+    if (info.Length() != 2) {
         return Nan::ThrowTypeError(usage);
     }
     
@@ -336,7 +336,7 @@ void BluetoothFd::do_accept() {
             flags = flags | SOCK_NONBLOCK;
         }
 
-        this->_client = ::accept4(this->_fd, (struct sockaddr *)&rem_addr, &opt, flags);
+        this->_client = ::accept4(this->_fd, (struct sockaddr *)&rem_addr, &opt, SOCK_NONBLOCK | SOCK_CLOEXEC);
 
         if (this->_client == -1)
         {

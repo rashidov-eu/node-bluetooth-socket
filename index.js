@@ -105,14 +105,14 @@ class BluetoothSocket extends stream.Duplex {
             cb = options;
             options = undefined;
         }
-        
+
         let nonblocking = true;
         
         if(options && options.nonblocking){
             nonblocking = options.nonblocking;
         }
 
-        this._impl.accept(options?.nonblocking | true, (err, fd) => {
+        this._impl.accept(nonblocking, (err, fd) => {
             if (err) {
                 if (typeof err === 'number') {
                     // if its a number its an libuv error code
