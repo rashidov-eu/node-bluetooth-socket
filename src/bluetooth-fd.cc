@@ -82,7 +82,7 @@ void BluetoothFd::stop() {
     }
 }
 
-int BluetoothFd::write_(char* data, int length) { return write(this->_fd, data, length); }
+ssize_t BluetoothFd::write_(char* data, int length) { return write(this->_fd, data, length); }
 
 bool BluetoothFd::close_() {
     this->stop();
@@ -148,13 +148,26 @@ NAN_METHOD(BluetoothFd::Write) {
     if (info.Length() > 0) {
         Local<Value> arg0 = info[0];
         if (arg0->IsObject()) {
-            int res = p->write_(node::Buffer::Data(arg0), node::Buffer::Length(arg0));
-            if (res > 0) {
-                info.GetReturnValue().Set(0);
-            } else {
-                info.GetReturnValue().Set(Nan::ErrnoException(errno, "write"));
+            ssize_t res = 0;
+            int size = node::Buffer::Length(arg0);
+            auto buf = node::Buffer::Data(arg0);
+            
+            while (size > 0) {
+                do {
+                    res = p->write_(buf, size);
+                } while((res < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
+
+                if (res < 0) {
+                    info.GetReturnValue().Set(Nan::ErrnoException(errno, "write"));
+                    return;
+                }
+
+                // shink size and walk buf forward by res bytes
+                size -= res;
+                buf += res;
             }
 
+            info.GetReturnValue().Set(0);
         } else {
             return Nan::ThrowTypeError("Can only write Buffers");
         }
@@ -251,23 +264,32 @@ NAN_METHOD(BluetoothFd::Listen) {
 
 NAN_METHOD(BluetoothFd::Accept) {
     Nan::HandleScope scope;
+    const char* usage = "usage: BluetoothFd.accept(blocking, callback)";
 
     if (info.Length() != 1) {
-        return Nan::ThrowTypeError("usage: BluetoothFd.accept(callback)");
+        return Nan::ThrowTypeError(usage);
     }
-
+    
     Local<Value> arg0 = info[0];
+    if (!arg0->IsBoolean()) {
+        return Nan::ThrowTypeError(usage);
+    } 
+
+    auto nonBlocking = Nan::To<bool>(arg0).FromJust();
+
+    Local<Value> arg1 = info[1];
     if (!arg0->IsFunction()) {
-        return Nan::ThrowTypeError("usage: BluetoothFd.accept(callback)");
+        return Nan::ThrowTypeError(usage);
     }
 
     BluetoothFd* p = Nan::ObjectWrap::Unwrap<BluetoothFd>(info.Holder());
-    p->accept(arg0.As<Function>());
+    p->accept(nonBlocking, arg1.As<Function>());
 }
 
-void BluetoothFd::accept(const Local<Function>& acceptCallback){
+void BluetoothFd::accept(const bool nonBlocking, const Local<Function>& acceptCallback){
     this->acceptHandle.data = this;
     this->_acceptCallback.SetFunction(acceptCallback); // function passed in
+    this->_acceptNonBlockingSockets = nonBlocking;
     uv_queue_work(uv_default_loop(), &this->acceptHandle, BluetoothFd::do_acceptCallback, after_acceptCallback);
 }
 
@@ -304,7 +326,13 @@ void BluetoothFd::do_accept() {
     socklen_t opt = sizeof(rem_addr);
     // accept one connection
     while(true){
-        this->_client = ::accept4(this->_fd, (struct sockaddr *)&rem_addr, &opt, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        int flags = SOCK_CLOEXEC;
+        if(this->_acceptNonBlockingSockets)
+        {
+            flags = flags | SOCK_NONBLOCK;
+        }
+
+        this->_client = ::accept4(this->_fd, (struct sockaddr *)&rem_addr, &opt, flags);
 
         if (this->_client == -1)
         {

@@ -90,21 +90,23 @@ class BluetoothSocket extends stream.Duplex {
     }
 
     listen(qLength = 1) {
-        if(typeof qLength !== 'number' || qLength <= 0)
+        if (typeof qLength !== 'number' || qLength <= 0)
             throw TypeError("qlLength must be a positive number");
 
         this._impl.listen(qLength);
     }
-    
+
     close() {
         this.destroy();
     }
 
     accept(options, cb) {
-        if (cb === undefined)
+        if (typeof options === 'function') {
             cb = options;
+            options = undefined;
+        }
 
-        this._impl.accept((err, fd) => {
+        this._impl.accept(options?.nonblocking | true, (err, fd) => {
             if (err) {
                 if (typeof err === 'number') {
                     // if its a number its an libuv error code

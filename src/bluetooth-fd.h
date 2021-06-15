@@ -25,11 +25,11 @@ class BluetoothFd : public Nan::ObjectWrap {
     int bind(uint8_t);
     int listen(int qLength);
 
-    int write_(char* data, int length);
+    ssize_t write_(char* data, int length);
     bool close_();
 
     void poll(int status);
-    void accept(const v8::Local<v8::Function>& acceptCallback);
+    void accept(const bool blocking, const v8::Local<v8::Function>& acceptCallback);
     void do_accept();
     void after_accept(int status);
 
@@ -46,6 +46,7 @@ class BluetoothFd : public Nan::ObjectWrap {
     int _lastErrno;
     Nan::Callback _readCallback;
     Nan::Callback _acceptCallback;
+    bool _acceptNonBlockingSockets = true;
 
     bool isReading;
     uv_poll_t _pollHandle;
