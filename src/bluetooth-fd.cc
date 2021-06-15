@@ -166,7 +166,7 @@ NAN_METHOD(BluetoothFd::Write) {
         Local<Value> arg0 = info[0];
         if (arg0->IsObject()) {
             int res = p->write_(node::Buffer::Data(arg0), node::Buffer::Length(arg0));
-            if (res > 0) {
+            if (res >= 0) {
                 info.GetReturnValue().Set(0);
             } else {
                 info.GetReturnValue().Set(Nan::ErrnoException(errno, "write"));
