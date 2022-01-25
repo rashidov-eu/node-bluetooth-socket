@@ -34,6 +34,7 @@
     "url": "https://github.com/waeco/node-bluetooth-socket/issues"
   },
   "os": [
-    "linux"
+    "linux",
+    "darwin"
   ]
 }
